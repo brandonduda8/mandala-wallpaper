@@ -50,6 +50,12 @@ jobs:
           unzip -q /tmp/gradle.zip -d /tmp
           /tmp/gradle-8.7/bin/gradle assembleDebug --no-daemon
 
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mandala-eclipse-live-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
       - name: Boot emulator (manual, KVM via sg)
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk

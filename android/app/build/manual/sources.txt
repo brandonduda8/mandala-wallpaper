@@ -1,0 +1,3 @@
+/home/hatch/workspace/mandala-wallpaper/android/app/src/main/java/com/apexforge/mandalawallpaper/MandalaRenderer.java
+/home/hatch/workspace/mandala-wallpaper/android/app/src/main/java/com/apexforge/mandalawallpaper/MandalaWallpaperService.java
+/home/hatch/workspace/mandala-wallpaper/android/app/build/manual/gen/com/apexforge/mandalawallpaper/R.java

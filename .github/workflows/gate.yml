@@ -1,0 +1,72 @@
+name: wallpaper-gate
+
+# Mandatory verification gate: no APK reaches the user without passing this.
+# Boots an API-34 emulator, installs the debug APK, sets it as the live
+# wallpaper, and PROVES motion (pixel diff between two screenshots 8s apart)
+# plus no crash in logcat for the wallpaper process.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install platform + build-tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          /tmp/gradle-8.7/bin/gradle assembleDebug --no-daemon
+
+      - name: Emulator gate — install, set wallpaper, prove motion
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            APK=android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r "$APK"
+            adb shell cmd wallpaper set-component com.apexforge.mandalawallpaper/com.apexforge.mandalawallpaper.MandalaWallpaperService
+            sleep 6
+            echo "--- bound wallpaper component ---"
+            adb shell dumpsys wallpaper | grep -m1 "mWallpaperComponent" || true
+            adb shell dumpsys wallpaper | grep -m1 "mandalawallpaper" || (echo "WALLPAPER NOT BOUND"; exit 1)
+            adb shell screencap -p /sdcard/shot_a.png
+            sleep 8
+            adb shell screencap -p /sdcard/shot_b.png
+            adb pull /sdcard/shot_a.png /tmp/shot_a.png
+            adb pull /sdcard/shot_b.png /tmp/shot_b.png
+            python3 "$GITHUB_WORKSPACE/.github/workflows/pixeldiff.py" /tmp/shot_a.png /tmp/shot_b.png
+            echo "--- crash check ---"
+            if adb logcat -d | grep -i "FATAL EXCEPTION" | grep -i "mandalawallpaper"; then
+              echo "CRASH FOUND in wallpaper process"; exit 1
+            fi
+            echo "no crash in wallpaper process"
+
+      - name: Upload gate screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-screenshots
+          path: /tmp/shot_*.png

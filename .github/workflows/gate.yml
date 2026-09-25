@@ -148,22 +148,14 @@ jobs:
           adb install -r "$APK"
           # Bind the live wallpaper: `cmd wallpaper` has no set-component on
           # API 34 and the API needs a signature permission, so as root we
-          # inject the component into wallpaper_info.xml (the exact format
-          # WallpaperManagerService parses on boot) and reboot.
+          # write wallpaper_info.xml as PLAIN TEXT (WallpaperManagerService's
+          # parser auto-detects text vs ABX binary) with our component, then
+          # reboot so it binds on boot.
           adb root
           adb wait-for-device
-          adb pull /data/system/users/0/wallpaper_info.xml /tmp/wallpaper_info.xml
-          python3 - << 'EOF'
-          import re
-          p = "/tmp/wallpaper_info.xml"
-          xml = open(p).read()
-          comp = "com.apexforge.mandalawallpaper/com.apexforge.mandalawallpaper.MandalaWallpaperService"
-          xml2, n = re.subn(r'(<wp\b[^>]*?)(/?>)',
-                            lambda m: m.group(1) + ' component="%s"' % comp + m.group(2),
-                            xml, count=1)
-          assert n == 1, "no <wp> tag found in wallpaper_info.xml"
-          open(p, "w").write(xml2)
-          print("component injected into wallpaper_info.xml")
+          cat > /tmp/wallpaper_info.xml << 'EOF'
+          <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+          <wp width="1080" height="2400" name="" component="com.apexforge.mandalawallpaper/com.apexforge.mandalawallpaper.MandalaWallpaperService" />
           EOF
           adb push /tmp/wallpaper_info.xml /data/system/users/0/wallpaper_info.xml
           adb shell "chmod 600 /data/system/users/0/wallpaper_info.xml && chown system:system /data/system/users/0/wallpaper_info.xml"

@@ -140,19 +140,47 @@ jobs:
           adb shell input keyevent 82 || true
           sleep 3
 
-      - name: Gate — install, set wallpaper, prove motion
+      - name: Gate — install, bind wallpaper, prove motion
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           APK=android/app/build/outputs/apk/debug/app-debug.apk
           adb install -r "$APK"
-          # Bind the live wallpaper via the debug helper activity
-          # (cmd wallpaper set-component does not exist on API 34).
-          adb shell am start -n com.apexforge.mandalawallpaper/.DebugSetWallpaperActivity
-          sleep 6
+          # Bind the live wallpaper: `cmd wallpaper` has no set-component on
+          # API 34 and the API needs a signature permission, so as root we
+          # inject the component into wallpaper_info.xml (the exact format
+          # WallpaperManagerService parses on boot) and reboot.
+          adb root
+          adb wait-for-device
+          adb pull /data/system/users/0/wallpaper_info.xml /tmp/wallpaper_info.xml
+          python3 - << 'EOF'
+          import re
+          p = "/tmp/wallpaper_info.xml"
+          xml = open(p).read()
+          comp = "com.apexforge.mandalawallpaper/com.apexforge.mandalawallpaper.MandalaWallpaperService"
+          xml2, n = re.subn(r'(<wp\b[^>]*?)(/?>)',
+                            lambda m: m.group(1) + ' component="%s"' % comp + m.group(2),
+                            xml, count=1)
+          assert n == 1, "no <wp> tag found in wallpaper_info.xml"
+          open(p, "w").write(xml2)
+          print("component injected into wallpaper_info.xml")
+          EOF
+          adb push /tmp/wallpaper_info.xml /data/system/users/0/wallpaper_info.xml
+          adb shell "chmod 600 /data/system/users/0/wallpaper_info.xml && chown system:system /data/system/users/0/wallpaper_info.xml"
+          adb reboot
+          adb wait-for-device
+          for i in $(seq 1 40); do
+            sleep 15
+            adb shell getprop sys.boot_completed 2>/dev/null | grep -q 1 && { echo "REBOOTED"; break; }
+          done
+          adb shell getprop sys.boot_completed | grep -q 1 || { echo "REBOOT TIMEOUT"; exit 1; }
+          adb shell input keyevent 82 || true
+          sleep 10
           echo "--- bound wallpaper component ---"
           adb shell dumpsys wallpaper | grep -m1 "mWallpaperComponent" || true
           adb shell dumpsys wallpaper | grep -m1 "mandalawallpaper" || (echo "WALLPAPER NOT BOUND"; exit 1)
+          echo "--- engine liveness ---"
+          adb shell dumpsys wallpaper | grep -iA2 "Wallpaper connection" | head -8 || true
           adb shell screencap -p /sdcard/shot_a.png
           sleep 8
           adb shell screencap -p /sdcard/shot_b.png

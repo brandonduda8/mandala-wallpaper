@@ -146,7 +146,9 @@ jobs:
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           APK=android/app/build/outputs/apk/debug/app-debug.apk
           adb install -r "$APK"
-          adb shell cmd wallpaper set-component com.apexforge.mandalawallpaper/com.apexforge.mandalawallpaper.MandalaWallpaperService
+          # Bind the live wallpaper via the debug helper activity
+          # (cmd wallpaper set-component does not exist on API 34).
+          adb shell am start -n com.apexforge.mandalawallpaper/.DebugSetWallpaperActivity
           sleep 6
           echo "--- bound wallpaper component ---"
           adb shell dumpsys wallpaper | grep -m1 "mWallpaperComponent" || true

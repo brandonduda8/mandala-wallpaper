@@ -5,3 +5,4 @@ android/.gradle/
 local.properties
 *.iml
 .DS_Store
+*.apk
